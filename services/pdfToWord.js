@@ -3,6 +3,23 @@ const path = require("path");
 const fs = require("fs");
 
 function getLibreOfficePath() {
+    // Linux / Docker
+    if (process.platform === "linux") {
+        const linuxCandidates = [
+            "/usr/bin/libreoffice",
+            "/usr/bin/soffice",
+            "/usr/local/bin/libreoffice",
+            "/usr/local/bin/soffice",
+        ];
+        for (const candidate of linuxCandidates) {
+            if (fs.existsSync(candidate)) {
+                return candidate;
+            }
+        }
+        return "soffice";
+    }
+
+    // Windows
     const candidates = [
         "C:\\Program Files (x86)\\LibreOffice\\program\\soffice.com",
         "C:\\Program Files\\LibreOffice\\program\\soffice.com",
@@ -38,8 +55,10 @@ function pdfToWord(inputPath, outputDir) {
             recursive: true,
         });
 
-        const profileUrl =
-            `file:///${profileDir.replace(/\\/g, "/")}`;
+        const normalizedProfile = profileDir.replace(/\\/g, "/");
+        const profileUrl = normalizedProfile.startsWith("/")
+            ? `file://${normalizedProfile}`
+            : `file:///${normalizedProfile}`;
 
         const args = [
             "--headless",

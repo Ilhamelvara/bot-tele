@@ -4,7 +4,7 @@ const { Telegraf } = require("telegraf");
 const fs = require("fs");
 const path = require("path");
 
-const wordToPdf = require("./services/WordtoPdf");
+const wordToPdf = require("./services/wordToPdf");
 const pdfToWord = require("./services/pdfToWord");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -698,10 +698,12 @@ let isRunning = false;
 
 async function startBot() {
     try {
-        await bot.launch();
+        const me = await bot.telegram.getMe();
+        console.log(`🤖 Bot Telegram @${me.username} berhasil terhubung dan siap melayani!`);
         isRunning = true;
-        console.log("🤖 Bot Telegram sedang berjalan...");
+        await bot.launch();
     } catch (error) {
+        isRunning = false;
         console.error("⚠️ Gagal terhubung ke Telegram API:", error.message);
         console.log("🔄 Mencoba menghubungkan kembali dalam 5 detik...");
         setTimeout(startBot, 5000);
