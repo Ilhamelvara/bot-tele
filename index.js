@@ -498,9 +498,10 @@ bot.on("document", async (ctx) => {
         // Download File
         const fileInfo = await ctx.telegram.getFile(fileId);
         const fileUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${fileInfo.file_path}`;
+        const fileUid = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
         const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
 
-        inputPath = path.join(TEMP_DIR, `${Date.now()}-${safeFileName}`);
+        inputPath = path.join(TEMP_DIR, `${fileUid}_${safeFileName}`);
         await downloadFile(fileUrl, inputPath);
 
         console.log("================================");
@@ -538,10 +539,10 @@ bot.on("document", async (ctx) => {
         }
 
         const cleanName = path.basename(fileName, extension);
-        const finalOutputPath = path.join(OUTPUT_DIR, `${cleanName}_converted.${targetExt}`);
+        const finalOutputPath = path.join(OUTPUT_DIR, `${fileUid}_${cleanName}.${targetExt}`);
 
         if (fs.existsSync(finalOutputPath)) {
-            fs.unlinkSync(finalOutputPath);
+            try { fs.unlinkSync(finalOutputPath); } catch {}
         }
         fs.renameSync(outputPath, finalOutputPath);
         outputPath = finalOutputPath;
@@ -608,16 +609,22 @@ bot.on("document", async (ctx) => {
             } catch {}
         }
 
-        // Hapus file sementara dari disk
-        if (inputPath && fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-        if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-        console.log("🗑️ File sementara dibersihkan.");
+        // Hapus file sementara dari disk secara aman (tidak boleh memicu false-error)
+        try {
+            if (inputPath && fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+            if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+            console.log("🗑️ File sementara dibersihkan.");
+        } catch (cleanupErr) {
+            console.warn("⚠️ Cleanup non-critical warning:", cleanupErr.message);
+        }
 
     } catch (error) {
         console.error("❌ Error saat konversi:", error);
 
-        if (inputPath && fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-        if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+        try {
+            if (inputPath && fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+            if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+        } catch {}
 
         // Hapus pesan status jika ada
         if (statusMsg) {
@@ -691,22 +698,46 @@ bot.catch((error, ctx) => {
 });
 
 // ================================
-// JALANKAN BOT DENGAN RETRY
+// JALANKAN BOT
 // ================================
 
 let isRunning = false;
+let isStarting = false;
 
 async function startBot() {
+    if (isStarting) return;
+    isStarting = true;
+
     try {
+        // Hentikan polling lama jika masih tersisa
+        try {
+            bot.stop();
+        } catch {}
+
         const me = await bot.telegram.getMe();
         console.log(`🤖 Bot Telegram @${me.username} berhasil terhubung dan siap melayani!`);
         isRunning = true;
-        await bot.launch();
+        isStarting = false;
+
+        // dropPendingUpdates: true mencegah antrean pesan error lama dieksekusi berulang saat restart
+        await bot.launch({
+            dropPendingUpdates: true,
+        });
     } catch (error) {
         isRunning = false;
+        isStarting = false;
         console.error("⚠️ Gagal terhubung ke Telegram API:", error.message);
-        console.log("🔄 Mencoba menghubungkan kembali dalam 5 detik...");
-        setTimeout(startBot, 5000);
+
+        const isConflict = error.message && error.message.includes("409");
+        const delay = isConflict ? 10000 : 5000;
+
+        if (isConflict) {
+            console.warn("⚠️ PERINGATAN: Terdeteksi instance bot lain yang sedang aktif dengan token ini.");
+            console.warn("Pastikan hanya ada SATU proses bot yang aktif (misalnya hanya di Docker).");
+        }
+
+        console.log(`🔄 Mencoba menghubungkan kembali dalam ${delay / 1000} detik...`);
+        setTimeout(startBot, delay);
     }
 }
 
@@ -714,17 +745,17 @@ startBot();
 
 // Graceful shutdown
 process.once("SIGINT", () => {
-    console.log("🛑 Menghentikan bot...");
-    if (isRunning) {
+    console.log("🛑 Menghentikan bot (SIGINT)...");
+    try {
         bot.stop("SIGINT");
-    }
+    } catch {}
     process.exit(0);
 });
 
 process.once("SIGTERM", () => {
-    console.log("🛑 Menghentikan bot...");
-    if (isRunning) {
+    console.log("🛑 Menghentikan bot (SIGTERM)...");
+    try {
         bot.stop("SIGTERM");
-    }
+    } catch {}
     process.exit(0);
 });
