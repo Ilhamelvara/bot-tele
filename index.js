@@ -716,6 +716,16 @@ async function startBot() {
 
         const me = await bot.telegram.getMe();
         console.log(`🤖 Bot Telegram @${me.username} berhasil terhubung dan siap melayani!`);
+
+        const loPath = wordToPdf.getLibreOfficePath ? wordToPdf.getLibreOfficePath() : null;
+        if (loPath) {
+            console.log(`📄 LibreOffice terdeteksi: ${loPath}`);
+        } else {
+            console.error("❌ PERINGATAN KRITIS: LibreOffice TIDAK DITEMUKAN di sistem/container!");
+            console.error("👉 Solusi di Coolify/Railway/VPS:");
+            console.error("   Ubah pengaturan 'Build Pack' dari 'Nixpacks' menjadi 'Dockerfile' agar LibreOffice ikut terinstal.");
+        }
+
         isRunning = true;
         isStarting = false;
 

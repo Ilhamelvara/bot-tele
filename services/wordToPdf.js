@@ -8,15 +8,28 @@ function getLibreOfficePath() {
         const linuxCandidates = [
             "/usr/bin/libreoffice",
             "/usr/bin/soffice",
+            "/usr/lib/libreoffice/program/soffice",
             "/usr/local/bin/libreoffice",
             "/usr/local/bin/soffice",
+            "/opt/libreoffice/program/soffice",
         ];
         for (const candidate of linuxCandidates) {
             if (fs.existsSync(candidate)) {
                 return candidate;
             }
         }
-        return "soffice";
+
+        // Cek binary di PATH
+        const pathDirs = (process.env.PATH || "").split(":");
+        for (const dir of pathDirs) {
+            for (const bin of ["libreoffice", "soffice"]) {
+                const full = path.join(dir, bin);
+                if (fs.existsSync(full)) {
+                    return full;
+                }
+            }
+        }
+        return null;
     }
 
     // Windows
@@ -41,7 +54,7 @@ function wordToPdf(inputPath, outputDir) {
 
         if (!sofficePath) {
             return reject(
-                new Error("LibreOffice tidak ditemukan.")
+                new Error("LibreOffice tidak ditemukan pada sistem/container. Pastikan build menggunakan Dockerfile yang sudah menginstal LibreOffice.")
             );
         }
 
@@ -71,6 +84,9 @@ function wordToPdf(inputPath, outputDir) {
             outputDir,
             inputPath,
         ];
+
+        console.log("🔄 Menjalankan LibreOffice (Word -> PDF)...");
+        console.log("Command:", sofficePath, args.join(" "));
 
         execFile(
             sofficePath,
@@ -118,4 +134,5 @@ function wordToPdf(inputPath, outputDir) {
     });
 }
 
+wordToPdf.getLibreOfficePath = getLibreOfficePath;
 module.exports = wordToPdf;
